@@ -1,171 +1,95 @@
 require 'csv'
+require 'date'
 
-class SalesManagment
-  attr_reader :shop_infos
+class SalesManagemet
+  attr_accessor :shops
 
-  # ファイルを読み込む
-  def initialize(file_path)
-    @shop_infos = []
-    CSV.foreach(file_path) do |record|
-        @shop_infos.push(record)
+  def initialize(csv_path)
+    @shops = []
+    reader = CSV.open(csv_path, 'r')
+    reader.shift
+    reader.each do |csv|
+      shop = @shops.find { |v| v.name == csv[0] }
+      if shop.nil?
+        shop = Shop.new(name: csv[0])
+        @shops << shop
+      end
+      shop.add_sales_detail(SalesDetail.new(sales_date: Date.parse(csv[1]), sales_money: csv[2], customer_count: csv[3]))
     end
-    return @shop_infos
   end
 
-  #明細情報を表示するメソッド
-  def self.display_specification_info(header, shop_records)
+  def display_specification_info
     puts "明細情報:"
-    puts "#{header.to_csv.chomp.gsub(/,/, '|')}|客単価"
-    shop_records.each do |shop_data|
-      print "#{shop_data.shop_name}|"
-      print "#{shop_data.sales_data}|"
-      print "#{shop_data.sales_amount}|"
-      print "#{shop_data.customers}|"
-      puts "#{shop_data.ave_spending_per_customer}"
+    puts "店舗名|売上日|売上金額|客数|客単価"
+    @shops.each do |shop|
+      shop.sales_details.each do |detail|
+        print "#{detail.shop.name}|"
+        print "#{detail.sales_date.strftime("%Y/%m/%d")}|"
+        print "#{detail.sales_money.round(0)}|"
+        print "#{detail.customer_count.round(0)}|"
+        print "#{sprintf("%.2f", detail.customer_unit.round(2))}\n"
+      end
     end
   end
 
-  #集計情報を表示するメソッド
-  def self.display_total_info(total_info_records)
-    puts
+  def display_total_info
     puts "集計情報:"
     puts "店舗名|売上金額の合計|売上金額の平均|客数の合計|客数の平均"
-    total_info_records.each do |total_info_data|
-      print "#{total_info_data.shop_name}|"
-      print "#{total_info_data.sum_sales_amount}|"
-      print "#{total_info_data.ave_sales_amount}|"
-      print "#{total_info_data.sum_customers}|"
-      puts "#{total_info_data.ave_customers}"
+    @shops.each do |shop|
+      print "#{shop.name}|"
+      print "#{shop.sum_sales_money.round(0)}|"
+      print "#{sprintf("%.2f", shop.avg_sales_money.round(2))}|"
+      print "#{shop.sum_customer_count.round(0)}|"
+      print "#{sprintf("%.2f", shop.avg_customer_count.round(2))}\n"
     end
   end
 end
 
 class SalesDetail
-  @shop_name_list = []
+  attr_accessor :shop, :sales_date, :sales_money, :customer_count
 
-  attr_accessor :shop_name,
-    :sales_data,
-    :sales_amount,
-    :customers,
-    :ave_spending_per_customer
-
-  def initialize(shop_name, sales_data, sales_amount, customers)
-    @shop_name = shop_name
-    @sales_data = sales_data
-    @sales_amount = sales_amount
-    @customers = customers
-    @ave_spending_per_customer = sprintf("%.2f",
-      (sales_amount.to_f / customers.to_f).round(2))
+  def initialize(sales_date: nil, sales_money: 0, customer_count: 0)
+    @sales_date = sales_date
+    @sales_money = sales_money.to_f
+    @customer_count = customer_count.to_f
   end
 
-  #名前のリストを取得するメソッド
-  def self.get_shop_name_list(shop_records)
-    @shop_name_list[0] = shop_records[0].shop_name
-    name_list_count = 1
-
-    shop_records.each do |shop_data|
-      @shop_name_list.each do |shop_name|
-        if(shop_name == shop_data.shop_name)
-          break
-        end
-        if(shop_name == @shop_name_list[@shop_name_list.size - 1])
-          @shop_name_list[name_list_count] = shop_data.shop_name
-          name_list_count += 1
-        end
-      end
-    end
-  end
-
-  #集計情報を計算するメソッド
-  def self.calc_total_info(shop_records)
-    total_info_records = []
-
-    @shop_name_list.each do |shop_name|
-      sum_sales_amount = 0
-      sum_customers = 0
-      total_sales_data = 0
-
-      shop_records.each do |shop_data|
-        if(shop_name == shop_data.shop_name)
-          sum_sales_amount += shop_data.sales_amount.to_i
-          sum_customers += shop_data.customers.to_i
-          total_sales_data += 1
-        end
-      end
-
-      total_info_records.push(Shop.new(
-        shop_name,
-        sum_sales_amount,
-        sprintf("%.2f",sum_sales_amount / total_sales_data.round(2)),
-        sum_customers,
-        sprintf("%.2f",sum_customers / total_sales_data.round(2))
-      ))
-    end
-    return total_info_records
+  def customer_unit
+    @sales_money / @customer_count
   end
 end
 
 class Shop
-  attr_accessor :shop_name,
-    :sum_sales_amount,
-    :ave_sales_amount,
-    :sum_customers,
-    :ave_customers
+  attr_accessor :sales_details
+  attr_accessor :name
 
-  def initialize(
-      shop_name,
-      sum_sales_amount,
-      ave_sales_amount,
-      sum_customers,
-      ave_customers
-    )
-    @shop_name = shop_name
-    @sum_sales_amount = sum_sales_amount
-    @ave_sales_amount = ave_sales_amount
-    @sum_customers = sum_customers
-    @ave_customers = ave_customers
+  def initialize(name: nil)
+    @name = name
+    @sales_details = []
+  end
+
+  def add_sales_detail(sales_detail)
+    sales_detail.shop = self
+    @sales_details << sales_detail
+  end
+
+  def sum_sales_money
+    @sales_details.inject(0) { |sum, v| sum += v.sales_money }
+  end
+
+  def avg_sales_money
+    sum_sales_money / @sales_details.size
+  end
+
+  def sum_customer_count
+    @sales_details.inject(0) { |sum, v| sum += v.customer_count }
+  end
+
+  def avg_customer_count
+    sum_customer_count / @sales_details.size
   end
 end
 
-begin
-  #コマンドライン引数の確認
-  if(ARGV.empty?)
-    raise "引数にCSVファイルのパスを入力してください。"
-  elsif(ARGV[0] =~ /^(?!.*\.csv$)/)
-    raise "引数にCSVファイルのパスを入力してください。"
-  end
-
-  sales_management = SalesManagment.new(ARGV[0])
-
-  #ヘッダーとショップ情報が存在するか確認
-  # TODO: SalesManagmentのinitializeの中で行うのが望ましい
-  if(sales_management.shop_infos.size < 2)
-    raise "項目またはショップ情報が存在しません。"
-  end
-
-  #ヘッダーの取得
-  header = sales_management.shop_infos[0]
-  sales_management.shop_infos.slice!(0)
-
-  sales_details = []
-  sales_management.shop_infos.each do |shop_info|
-    sales_details.push(SalesDetail.new(shop_info[0], shop_info[1], shop_info[2], shop_info[3]))
-  end
-
-  #ネームリストの作成
-  SalesDetail.get_shop_name_list(sales_details)
-
-  #集計情報の取得
-  total_info_records = SalesDetail.calc_total_info(sales_details)
-
-  #明細情報の表示
-  SalesManagment.display_specification_info(header, sales_details)
-
-  #集計情報の表示
-  SalesManagment.display_total_info(total_info_records)
-
-rescue SystemCallError, IOError => e
-  puts SystemCallError.new("class=[#{e.class}] message=[#{e.message}]")
-rescue => e
-  puts e.message
-end
+manager = SalesManagemet.new('sales.csv')
+manager.display_specification_info
+manager.display_total_info
