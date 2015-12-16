@@ -138,6 +138,7 @@ begin
   sales_management = SalesManagment.new(ARGV[0])
 
   #ヘッダーとショップ情報が存在するか確認
+  # TODO: SalesManagmentのinitializeの中で行うのが望ましい
   if(sales_management.shop_infos.size < 2)
     raise "項目またはショップ情報が存在しません。"
   end
